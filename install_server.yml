@@ -1,0 +1,157 @@
+---
+- hosts: all
+  become: true
+  vars_files:
+    - vars/main.yml
+
+  tasks:
+    - name: Upgrade the whole system
+      apt: upgrade=dist update_cache=yes
+
+    - name: Install standard packages
+      apt: name={{ packages }} state=present
+      # with_items: "{{ packages }}"
+
+    # - name: Disable password authentication for root
+    #   lineinfile:
+    #     path: /etc/ssh/sshd_config
+    #     state: present
+    #     regexp: '^#?PermitRootLogin'
+    #     line: 'PermitRootLogin prohibit-password'
+
+    # ==> Create administrative sudoer user
+    - name: (user) create user group
+      group: name={{ user.login }} state=present
+
+    - name: (user) create sudoer user
+      user:
+        name: "{{ user.login }}"
+        append: "yes"
+        create_home: "yes"
+        groups: "{{ user.groups }}"
+        password: "{{ user.password | password_hash('sha512', hash_salt) }}"
+        state: "present"
+        system: "no"
+        shell: /bin/bash
+        update_password: "on_create"
+
+    - name: (user) create .ssh directory
+      file:
+        path: "/home/{{user.login}}/.ssh"
+        state: directory
+        owner: "{{user.login}}"
+
+    - name: (user) config user ssh authorized key
+      authorized_key:
+        user: "{{ user.login }}"
+        state: present
+        # TODO : improve -> only handle 1 key -> use loop
+        key: "{{ lookup('file', ssh_key_dir + '/id_rsa.pub') }}"
+
+
+    # ==> SSH
+    - name: (ssh) Secure ssh login
+      lineinfile:
+        dest: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        state: present
+      with_items:
+        - regexp: "PasswordAuthentication"
+          line: "PasswordAuthentication no"
+        # TODO : enable later
+        # - regexp: "PermitRootLogin"
+        #   line: "PermitRootLogin no"
+        - regexp: "PermitEmptyPasswords"
+          line: "PermitEmptyPasswords no"
+      notify: restart ssh
+
+    # ==> Docker
+    - name: (docker) Install required system packages
+      apt: name={{ item }} state=latest update_cache=yes
+      loop: [ 'apt-transport-https', 'ca-certificates', 'curl', 'software-properties-common', 'python3-pip', 'virtualenv', 'python3-setuptools']
+
+    - name: (docker) Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: (docker) Add Docker Repository
+      apt_repository:
+        repo: deb https://download.docker.com/linux/ubuntu focal stable
+        state: present
+
+    - name: (docker) Update apt and install docker-ce
+      apt: update_cache=yes name=docker-ce state=latest
+
+    - name: (docker) Install Docker Module for Python
+      pip: name=docker
+
+    # ==> Fail2ban
+    - name: (fail2ban) install package
+      apt:
+        name: fail2ban
+        state: present
+
+    - name: (fail2ban) create log file
+      file:
+       path: "/var/log/auth.log"
+       state: touch
+
+    - name: (fail2ban) enable
+      service:
+        name: fail2ban
+        state: started
+        enabled: yes
+      notify: restart fail2ban
+
+
+    # ==> ufw
+    - name: (ufw) install package
+      apt:
+        name: ufw
+        state: present
+
+    - name: (ufw) allow ssh traffic
+      ufw: 
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: (ufw) allow https traffic
+      ufw: 
+        rule: allow
+        port: '443'
+        proto: tcp
+
+    - name: (ufw) allow http traffic
+      ufw: 
+        rule: allow
+        port: '80'
+        proto: tcp
+
+    - name: (ufw) setup logs
+      ufw: logging=on
+
+    - name: (ufw) enable and setup deny all
+      ufw: 
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    # ==> cleanup
+    - name: Remove useless packages from the cache
+      apt: autoclean=yes
+
+    - name: Remove dependencies that are no longer required
+      apt: autoremove=yes
+
+  handlers:
+    - name: restart fail2ban
+      service: name=fail2ban state=restarted
+
+    - name: restart ssh
+      service: name=sshd state=restarted
+
+    - name: reload ufw
+      ufw: state=reloaded

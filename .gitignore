@@ -1,0 +1,3 @@
+!data/ssh/.gitkeep
+data/ssh/*
+vars/main.yml
