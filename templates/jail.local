@@ -1,0 +1,6 @@
+# Managed by ansible
+
+[DEFAULT]
+
+# "bantime" is the number of seconds that a host is banned.
+bantime  = 10080m
