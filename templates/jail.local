@@ -3,6 +3,6 @@
 [DEFAULT]
 
 # "bantime" is the number of seconds that a host is banned.
-bantime  = 720h
+bantime  = 43200m
 
-findtime  = 5h
+findtime  = 300m
