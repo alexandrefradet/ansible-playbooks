@@ -87,6 +87,9 @@
     - name: (docker) Install Docker Module for Python
       pip: name=docker
 
+    - name: (docker) Install docker-compose
+      apt: name=docker-compose state=latest
+
     # ==> Fail2ban
     - name: (fail2ban) install package
       apt:
