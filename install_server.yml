@@ -159,6 +159,10 @@
     - name: Remove dependencies that are no longer required
       apt: autoremove=yes
 
+    - name: Running Nginx config role
+      include_role:
+        name: "nginx"
+
   handlers:
     - name: restart fail2ban
       service: name=fail2ban state=restarted

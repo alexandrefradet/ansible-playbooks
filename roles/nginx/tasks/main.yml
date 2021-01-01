@@ -1,0 +1,6 @@
+---
+- name: Install nginx
+  apt: name=nginx state=latest
+
+- name: Install letsencrypt
+  apt: name=letsencrypt state=latest
